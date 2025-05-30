@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مكالمة فيديو مع الأصدقاء</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .video-container {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        video {
+            background-color: #000;
+            border-radius: 8px;
+            max-width: 100%;
+            height: auto;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #localVideo {
+            width: 300px;
+            height: 225px;
+        }
+
+        #remoteVideo {
+            width: 500px;
+            height: 375px;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .settings {
+            margin-top: 20px;
+        }
+
+        input {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            margin-right: 10px;
+        }
+
+        label {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>مكالمة فيديو مع الأصدقاء</h1>
+        
+        <div class="video-container">
+            <video id="localVideo" autoplay muted></video>
+            <video id="remoteVideo" autoplay></video>
+        </div>
+        
+        <div class="controls">
+            <button id="startButton">بدء المكالمة</button>
+            <button id="callButton" disabled>الاتصال بصديق</button>
+            <button id="hangupButton" disabled>إنهاء المكالمة</button>
+        </div>
+        
+        <div class="settings">
+            <label for="roomId">معرف الغرفة:</label>
+            <input type="text" id="roomId" placeholder="أدخل معرف الغرفة">
+        </div>
+    </div>
+
+    <script>
+        // عناصر DOM
+        const startButton = document.getElementById('startButton');
+        const callButton = document.getElementById('callButton');
+        const hangupButton = document.getElementById('hangupButton');
+        const roomIdInput = document.getElementById('roomId');
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+
+        // متغيرات WebRTC
+        let localStream;
+        let peerConnection;
+        let roomId;
+
+        // إعدادات STUN/TURN (يمكنك إضافة خوادمك الخاصة هنا)
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
+        };
+
+        // حدث بدء المكالمة
+        startButton.addEventListener('click', async () => {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localVideo.srcObject = localStream;
+                startButton.disabled = true;
+                callButton.disabled = false;
+                console.log('تم الحصول على الوسائط المحلية');
+            } catch (err) {
+                console.error('خطأ في الحصول على الوسائط:', err);
+                alert('خطأ في الوصول إلى الكاميرا أو الميكروفون');
+            }
+        });
+
+        // حدث الاتصال بصديق
+        callButton.addEventListener('click', async () => {
+            roomId = roomIdInput.value || generateRoomId();
+            roomIdInput.value = roomId;
+            
+            try {
+                // إنشاء اتصال PeerConnection
+                peerConnection = new RTCPeerConnection(configuration);
+                
+                // إضافة تيار الوسائط المحلي
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+                
+                // معالجة المرشح ICE
+                peerConnection.onicecandidate = event => {
+                    if (event.candidate) {
+                        console.log('ICE Candidate:', event.candidate);
+                        // هنا يجب إرسال المرشح إلى الطرف الآخر عبر خدمة الإشارة
+                    }
+                };
+                
+                // معالجة تيار الوسائط البعيد
+                peerConnection.ontrack = event => {
+                    remoteVideo.srcObject = event.streams[0];
+                    console.log('تم استلام تيار وسائط بعيد');
+                };
+                
+                // إنشاء عرض SDP
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                console.log('عرض SDP:', offer);
+                
+                // هنا يجب إرسال العرض إلى الطرف الآخر عبر خدمة الإشارة
+                
+                callButton.disabled = true;
+                hangupButton.disabled = false;
+            } catch (err) {
+                console.error('خطأ في إنشاء الاتصال:', err);
+                alert('خطأ في إنشاء الاتصال');
+            }
+        });
+
+        // حدث إنهاء المكالمة
+        hangupButton.addEventListener('click', () => {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            if (remoteVideo.srcObject) {
+                remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+                remoteVideo.srcObject = null;
+            }
+            
+            hangupButton.disabled = true;
+            callButton.disabled = false;
+            startButton.disabled = false;
+            console.log('تم إنهاء المكالمة');
+        });
+
+        // دالة لإنشاء معرف غرفة عشوائي
+        function generateRoomId() {
+            return Math.random().toString(36).substring(2, 8);
+        }
+
+        // ملاحظة: هذا مثال مبسط بدون خدمة إشارة (Signaling Server)
+        // في تطبيق حقيقي، تحتاج إلى خدمة إشارة لتبادل SDP و ICE Candidates بين الأطراف
+    </script>
+</body>
+</html>
